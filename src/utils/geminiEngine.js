@@ -1,6 +1,6 @@
 const API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL = 'llama3-70b-8192';
+const MODEL = 'llama-3.3-70b-versatile';
 
 export async function generateBloopResponse(promptText, sassLevel, userBalance, isScannerContext = false, foodOrderCount = 0) {
     if (!API_KEY || API_KEY === 'undefined' || API_KEY.trim() === '') {
