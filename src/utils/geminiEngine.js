@@ -1,86 +1,84 @@
-const API_KEY = import.meta.env.NEXT_PUBLIC_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+const API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const MODEL = 'llama3-70b-8192';
 
 export async function generateBloopResponse(promptText, sassLevel, userBalance, isScannerContext = false, foodOrderCount = 0) {
     if (!API_KEY || API_KEY === 'undefined' || API_KEY.trim() === '') {
-        console.error("CRITICAL ERROR: Gemini API Key is missing or undefined.");
-        return "Hey, you forgot to add the API key in Vercel!";
+        console.error("CRITICAL ERROR: VITE_GROQ_API_KEY is missing or undefined.");
+        return "Hey, you forgot to add the Groq API key in Vercel!";
     }
 
-    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`;
-    
     let systemPrompt;
 
     if (isScannerContext) {
-        systemPrompt = `The user scanned: ${promptText}. The user has ₹${userBalance}. The current AI personality mode is: ${sassLevel}. 
-Rule 1: If the scanned merchant is Myntra, Zara, Steam, or Amazon, you MUST assume it is a luxury and strictly output [IMPULSE].
-Rule 2: The user has ordered food ${foodOrderCount} times so far. If the scanned merchant is Swiggy or Zomato AND the foodOrderCount is less than 2, output [ESSENTIAL]. However, if the scanned merchant is Swiggy or Zomato AND the foodOrderCount is 2 or greater, you MUST output [IMPULSE] and roast them for ordering takeout too much.
-If the scanned item is a person's name, a peer-to-peer transfer, groceries, or medical, you MUST output the exact word [ESSENTIAL] at the very beginning of your response. If it is clothes, gadgets, or luxury, output [IMPULSE]. Then, write a response strictly matching the ${sassLevel} persona (Chill = Polite, Sassy = Sarcastic, Ruthless = Savage/Mean).`;
+        systemPrompt = `You are Bloop, a ${sassLevel} AI financial coach. The user has ₹${userBalance}.
+Rule 1: If the scanned merchant is Myntra, Zara, Steam, Amazon, or PS5, you MUST output [IMPULSE].
+Rule 2: The user has ordered food ${foodOrderCount} times so far. If the merchant is Swiggy or Zomato AND foodOrderCount < 2, output [ESSENTIAL]. If foodOrderCount >= 2, output [IMPULSE] and roast them for ordering too much takeout.
+Rule 3: If the item is a person's name, P2P transfer, groceries, or medical, output [ESSENTIAL]. If it is clothes, gadgets, gaming, or luxury, output [IMPULSE].
+Persona: Chill = Polite & encouraging. Sassy = Sarcastic & witty. Ruthless = Savage & brutal.
+STRICT FORMAT: Start your response with EXACTLY [ESSENTIAL] or [IMPULSE]. Then write a punchy, complete sentence of up to 10 words. Never truncate. Never use markdown or asterisks.`;
     } else {
         if (sassLevel === 'Chill') {
-            systemPrompt = `You are Bloop, a polite financial advisor. The user has ₹${userBalance}. Answer their query gently.`;
+            systemPrompt = `You are Bloop, a friendly and polite financial advisor. The user has ₹${userBalance}. Answer their query gently and helpfully.`;
         } else if (sassLevel === 'Sassy') {
-            systemPrompt = `You are Bloop, a sarcastic financial advisor. The user has ₹${userBalance}. Tease them.`;
+            systemPrompt = `You are Bloop, a sarcastic financial advisor who loves teasing. The user has ₹${userBalance}. Roast their financial decisions with wit.`;
         } else {
-            systemPrompt = `You are Bloop, a savage financial roaster. The user has ₹${userBalance}. Destroy their ego.`;
+            systemPrompt = `You are Bloop, a savage financial roaster. The user has ₹${userBalance}. Absolutely destroy their ego about their spending habits.`;
         }
+        systemPrompt += `\nSTRICT RULE: Write a complete, punchy response of up to 10 words maximum. Finish your sentence completely. DO NOT use markdown, asterisks, or labels like 'Draft 1'. Output ONLY pure plain text.`;
     }
 
-    systemPrompt += `\nSTRICT RULE: You must write a complete, punchy response of up to 10 words maximum. You must finish your sentence completely and never stop halfway.`;
-    
-    if (!isScannerContext) {
-        systemPrompt += `\nDO NOT use markdown, DO NOT use asterisks (*), DO NOT output labels like 'Draft 1'. Output ONLY pure, unformatted plain text.`;
-    }
-
-    console.log("API Key Status: Loaded successfully.");
-
-    const fullPromptText = `${systemPrompt}\n\nUser: ${promptText}`;
+    console.log("Groq API Key Status: Loaded ✅");
+    console.log("Sending to Groq:", { model: MODEL, promptText });
 
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${API_KEY}`
             },
             body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: fullPromptText }]
-                }],
-                generationConfig: {
-                    temperature: 0.9,
-                    maxOutputTokens: 500,
-                }
+                model: MODEL,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: promptText }
+                ],
+                temperature: 0.9,
+                max_tokens: 120,
             })
         });
 
         if (!response.ok) {
             const errorBody = await response.text();
-            console.error(`Gemini SDK HTTP Error ${response.status}:`, errorBody);
-            throw new Error(`Google AI SDK Error: ${response.status}`);
+            console.error(`Groq API Error [HTTP ${response.status}]:`, errorBody);
+            if (response.status === 401) {
+                return "Groq API key is invalid or expired. Check Vercel env vars!";
+            }
+            if (response.status === 404) {
+                return "Groq API URL not found. Check the endpoint config!";
+            }
+            throw new Error(`Groq HTTP ${response.status}: ${errorBody}`);
         }
 
         const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        console.log("RAW AI RESPONSE:", text);
+        const text = data.choices?.[0]?.message?.content?.trim();
+        console.log("RAW GROQ RESPONSE:", text);
 
-        if (!text) throw new Error('Empty response from Google AI.');
+        if (!text) throw new Error('Empty response from Groq.');
 
         return text;
     } catch (err) {
-        console.error("Gemini API Request Failed:", err);
+        console.error("Groq API Request Failed:", err.message);
 
         if (isScannerContext) {
-            // Fallback: classify based on common patterns
             const lower = promptText.toLowerCase();
-            const essentialKeywords = ['grocery', 'medical', 'hospital', 'clinic', 'electric', 'water', 'gas', 'school', 'college', 'rent', 'bigbasket', 'dmart', 'more', 'reliance fresh'];
-            const wasteKeywords = ['zara', 'h&m', 'nike', 'adidas', 'starbucks', 'dominos', 'swiggy', 'zomato', 'amazon', 'flipkart', 'myntra', 'ajio', 'gaming', 'steam'];
+            const essentialKeywords = ['grocery', 'medical', 'hospital', 'clinic', 'electric', 'water', 'gas', 'school', 'college', 'rent', 'bigbasket', 'dmart', 'reliance fresh'];
+            const wasteKeywords = ['zara', 'h&m', 'nike', 'adidas', 'starbucks', 'dominos', 'swiggy', 'zomato', 'amazon', 'flipkart', 'myntra', 'ajio', 'gaming', 'steam', 'ps5'];
 
-            if (essentialKeywords.some(k => lower.includes(k))) {
-                return '[ESSENTIAL] Responsible purchase. Approved. ✅';
-            }
-            if (wasteKeywords.some(k => lower.includes(k))) {
-                return '[IMPULSE] Another unnecessary purchase? Your wallet is begging for mercy. 💀';
-            }
-            return '[ESSENTIAL] Sending money to a friend. Be careful out there. 🫡';
+            if (essentialKeywords.some(k => lower.includes(k))) return '[ESSENTIAL] Responsible purchase. Approved. ✅';
+            if (wasteKeywords.some(k => lower.includes(k))) return '[IMPULSE] Another unnecessary purchase? Your wallet weeps. 💀';
+            return '[ESSENTIAL] Sending money to a friend. Stay safe out there. 🫡';
         }
 
         return `SYSTEM ERROR: ${err.message}`;
