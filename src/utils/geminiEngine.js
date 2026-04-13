@@ -83,6 +83,6 @@ If the scanned item is a person's name, a peer-to-peer transfer, groceries, or m
             return '[ESSENTIAL] Sending money to a friend. Be careful out there. 🫡';
         }
 
-        return "Sorry, my brain glitched for a sec. Try again! 🤖";
+        return `SYSTEM ERROR: ${err.message}`;
     }
 }
