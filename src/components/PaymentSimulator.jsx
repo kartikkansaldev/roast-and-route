@@ -35,6 +35,8 @@ export default function PaymentSimulator({ isOpen, onClose }) {
             setEnteredPin('')
             setPinError(false)
             setIsProcessing(false)
+            setPendingRoast(null)
+            setRoastType(null)
             if (scannerRef.current) {
                 try {
                     scannerRef.current.stop().catch(() => {})
@@ -42,6 +44,10 @@ export default function PaymentSimulator({ isOpen, onClose }) {
             }
         }
     }, [isOpen])
+
+    // Pre-fetched AI response — fired the moment QR is scanned
+    const [pendingRoast, setPendingRoast] = useState(null)
+    const [roastType, setRoastType] = useState(null) // 'ESSENTIAL' or 'IMPULSE'
 
     const processScan = async (rawText) => {
         console.log("RAW QR SCAN DETECTED:", rawText)
@@ -76,7 +82,6 @@ export default function PaymentSimulator({ isOpen, onClose }) {
                 if (!isNaN(parsedAm) && parsedAm > 0) amount = parsedAm;
             }
         } catch (e) {
-            // Restrict number parsing to ignore 10-digit phone numbers
             const amountMatch = rawText.match(/₹\s*(\d+)/i) || rawText.match(/\b(\d{1,5})\b/);
             if (amountMatch) {
                 amount = parseInt(amountMatch[1]);
@@ -85,27 +90,35 @@ export default function PaymentSimulator({ isOpen, onClose }) {
 
         setScannedAmount(amount)
         setPayeeName(parsedName.substring(0, 35))
+        setPaymentAmount(amount.toString())
+        setPendingRoast(null)
+        setRoastType(null)
         setPhase('LOAD_A')
 
         try {
+            // 🔥 FIRE AI IMMEDIATELY ON SCAN — store result, don't wait for PIN
             const aiReply = await generateBloopResponse(rawText, sassLevel, userBalance, true, foodOrderCount)
 
             if (aiReply.includes('[ESSENTIAL]')) {
                 const cleanText = aiReply.replace('[ESSENTIAL]', '').trim();
-                setAiData({ roast: cleanText });
-                setPaymentAmount(amount.toString());
-                setPhase('SCANNER'); // Strictly hide roast modal
-                setPaymentStep(1);   // Show payment flow
-                
+                setPendingRoast(cleanText)
+                setRoastType('ESSENTIAL')
+                setAiData({ roast: cleanText })
+
                 const lowerName = parsedName.toLowerCase();
                 if (lowerName.includes('swiggy') || lowerName.includes('zomato')) {
                     setFoodOrderCount(prev => prev + 1);
                 }
+
+                setPhase('SCANNER');
+                setPaymentStep(1); // Show payment flow immediately
             } else {
                 const cleanText = aiReply.replace('[IMPULSE]', '').replace('[ESSENTIAL]', '').trim();
-                setAiData({ roast: cleanText });
-                setPaymentStep(0);   // Strictly hide payment flow
-                setPhase('ROAST_ENTRY'); // Launch Roast/Hammer modal
+                setPendingRoast(cleanText)
+                setRoastType('IMPULSE')
+                setAiData({ roast: cleanText })
+                setPaymentStep(0);
+                setPhase('ROAST_ENTRY'); // Launch roast intercept immediately
             }
 
         } catch (err) {
@@ -115,6 +128,7 @@ export default function PaymentSimulator({ isOpen, onClose }) {
             setPaymentStep(1)
         }
     }
+
 
     // Setup QR Scanner — dynamic import to prevent SSR/init crashes
     useEffect(() => {
@@ -440,7 +454,13 @@ export default function PaymentSimulator({ isOpen, onClose }) {
                                             setIsProcessing(true);
                                             setTimeout(() => {
                                                 setIsProcessing(false);
-                                                setPaymentStep(3); // any 4 digits work for phase 11 demo
+                                                if (roastType === 'IMPULSE' && pendingRoast) {
+                                                    // 🔥 INSTANT INTERCEPT — use pre-fetched AI, zero wait
+                                                    setPaymentStep(0);
+                                                    setPhase('ROAST_MODAL');
+                                                } else {
+                                                    setPaymentStep(3); // ESSENTIAL: go straight to success
+                                                }
                                             }, 1400);
                                         }
                                     }} className={`w-[68px] h-[68px] rounded-full mx-auto flex items-center justify-center text-black text-2xl transition-all duration-300 ${enteredPin.length === 4 ? 'bg-[#34c97a] hover:bg-[#34c97a]/90 shadow-[0_4px_16px_rgba(52,201,122,0.4)] cursor-pointer scale-105' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
