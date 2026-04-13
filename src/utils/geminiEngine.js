@@ -1,8 +1,14 @@
-const API_KEY = import.meta.env.NEXT_PUBLIC_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`
+const API_KEY = import.meta.env.NEXT_PUBLIC_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
 
 export async function generateBloopResponse(promptText, sassLevel, userBalance, isScannerContext = false, foodOrderCount = 0) {
-    let systemPrompt
+    if (!API_KEY || API_KEY === 'undefined' || API_KEY.trim() === '') {
+        console.error("CRITICAL ERROR: Gemini API Key is missing or undefined.");
+        return "Hey, you forgot to add the API key in Vercel!";
+    }
+
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`;
+    
+    let systemPrompt;
 
     if (isScannerContext) {
         systemPrompt = `The user scanned: ${promptText}. The user has ₹${userBalance}. The current AI personality mode is: ${sassLevel}. 
@@ -25,7 +31,7 @@ If the scanned item is a person's name, a peer-to-peer transfer, groceries, or m
         systemPrompt += `\nDO NOT use markdown, DO NOT use asterisks (*), DO NOT output labels like 'Draft 1'. Output ONLY pure, unformatted plain text.`;
     }
 
-    console.log("API Key Status:", API_KEY ? "Loaded" : "MISSING");
+    console.log("API Key Status: Loaded successfully.");
 
     const fullPromptText = `${systemPrompt}\n\nUser: ${promptText}`;
 
@@ -46,37 +52,37 @@ If the scanned item is a person's name, a peer-to-peer transfer, groceries, or m
             })
         });
 
-        if (!response.ok) throw new Error("API responded with status: " + response.status);
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error(`Gemini SDK HTTP Error ${response.status}:`, errorBody);
+            throw new Error(`Google AI SDK Error: ${response.status}`);
+        }
 
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
         console.log("RAW AI RESPONSE:", text);
 
-        if (!text) throw new Error('Empty response');
+        if (!text) throw new Error('Empty response from Google AI.');
 
-        if (isScannerContext) {
-            return text
-        }
-
-        return text
+        return text;
     } catch (err) {
-        console.error("Fetch Error:", err);
+        console.error("Gemini API Request Failed:", err);
 
         if (isScannerContext) {
             // Fallback: classify based on common patterns
-            const lower = promptText.toLowerCase()
-            const essentialKeywords = ['grocery', 'medical', 'hospital', 'clinic', 'electric', 'water', 'gas', 'school', 'college', 'rent', 'bigbasket', 'dmart', 'more', 'reliance fresh']
-            const wasteKeywords = ['zara', 'h&m', 'nike', 'adidas', 'starbucks', 'dominos', 'swiggy', 'zomato', 'amazon', 'flipkart', 'myntra', 'ajio', 'gaming', 'steam']
+            const lower = promptText.toLowerCase();
+            const essentialKeywords = ['grocery', 'medical', 'hospital', 'clinic', 'electric', 'water', 'gas', 'school', 'college', 'rent', 'bigbasket', 'dmart', 'more', 'reliance fresh'];
+            const wasteKeywords = ['zara', 'h&m', 'nike', 'adidas', 'starbucks', 'dominos', 'swiggy', 'zomato', 'amazon', 'flipkart', 'myntra', 'ajio', 'gaming', 'steam'];
 
             if (essentialKeywords.some(k => lower.includes(k))) {
-                return '[ESSENTIAL] Responsible purchase. Approved. ✅'
+                return '[ESSENTIAL] Responsible purchase. Approved. ✅';
             }
             if (wasteKeywords.some(k => lower.includes(k))) {
-                return '[IMPULSE] Another unnecessary purchase? Your wallet is begging for mercy. 💀'
+                return '[IMPULSE] Another unnecessary purchase? Your wallet is begging for mercy. 💀';
             }
-            return '[ESSENTIAL] Sending money to a friend. Be careful out there. 🫡'
+            return '[ESSENTIAL] Sending money to a friend. Be careful out there. 🫡';
         }
 
-        return "Sorry, my brain glitched for a sec. Try again! 🤖"
+        return "Sorry, my brain glitched for a sec. Try again! 🤖";
     }
 }
