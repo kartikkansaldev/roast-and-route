@@ -137,45 +137,62 @@ export default function PaymentSimulator({ isOpen, onClose }) {
         let isSetup = false
         if (isOpen && phase === 'SCANNER') {
             if (scannerRef.current) return;
-            import('html5-qrcode').then(({ Html5Qrcode }) => {
+            import('html5-qrcode').then(({ Html5Qrcode, Html5QrcodeSupportedFormats }) => {
                 const readerNode = document.getElementById("reader");
                 if (!readerNode) return;
                 readerNode.innerHTML = ""; // Prune any zombie videos from StrictMode double-mounts
 
-                const scanner = new Html5Qrcode("reader")
-                scannerRef.current = scanner
-                scanner.start(
-                { facingMode: "environment" },
-                { fps: 10, qrbox: { width: 250, height: 250 } },
-                async (decodedText) => {
-                    if (isSetup) return
-                    isSetup = true
-                    processScan(decodedText)
-                },
-                (errorMessage) => {
-                    // parse errors ignore
+                try {
+                    const scanner = new Html5Qrcode("reader", {
+                        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+                    })
+                    scannerRef.current = scanner
+                    
+                    // Request higher resolution and strict environment facing
+                    const cameraConfig = { 
+                        facingMode: "environment",
+                        width: { ideal: 1080 },
+                        height: { ideal: 1920 }
+                    };
+
+                    scanner.start(
+                        cameraConfig,
+                        { fps: 15, qrbox: { width: 250, height: 250 } },
+                        async (decodedText) => {
+                            if (isSetup) return
+                            isSetup = true
+                            processScan(decodedText)
+                        },
+                        (errorMessage) => {
+                            // parse errors ignore
+                        }
+                    ).catch(err => {
+                        console.error("Camera access failed", err)
+                    })
+                } catch (err) {
+                     console.error("Scanner initialization failed", err)
                 }
-            ).catch(err => {
-                console.error("Camera access failed", err)
-            })
             }).catch(err => {
                 console.error("html5-qrcode load failed", err)
             })
         }
 
         return () => {
+            isSetup = true; // prevent any pending scans from passing
             if (scannerRef.current) {
+                const scanner = scannerRef.current;
+                scannerRef.current = null; // immediately detach to prevent loops
+
                 try {
-                    scannerRef.current.stop().then(() => {
-                        if (scannerRef.current) {
-                            scannerRef.current.clear()
-                            scannerRef.current = null
-                        }
-                    }).catch(() => {
-                        scannerRef.current = null
+                    scanner.stop().then(() => {
+                        scanner.clear();
+                    }).catch(err => {
+                        console.warn("Scanner stop warning:", err);
+                        try { scanner.clear() } catch(e){}
                     })
                 } catch(e) {
-                    scannerRef.current = null
+                    console.warn("Scanner cleanup warning:", e);
+                    try { scanner.clear() } catch(e){}
                 }
             }
             
