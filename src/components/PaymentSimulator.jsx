@@ -135,70 +135,84 @@ export default function PaymentSimulator({ isOpen, onClose }) {
     // Setup QR Scanner — dynamic import to prevent SSR/init crashes
     useEffect(() => {
         let isSetup = false
+        let localScanner = null // local ref to safely use in async cleanup
+
         if (isOpen && phase === 'SCANNER') {
             if (scannerRef.current) return;
+
             import('html5-qrcode').then(({ Html5Qrcode, Html5QrcodeSupportedFormats }) => {
                 const readerNode = document.getElementById("reader");
                 if (!readerNode) return;
-                readerNode.innerHTML = ""; // Prune any zombie videos from StrictMode double-mounts
+                readerNode.innerHTML = ""; // Prune zombie videos from StrictMode double-mounts
 
-                try {
-                    const scanner = new Html5Qrcode("reader", {
-                        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
-                    })
-                    scannerRef.current = scanner
-                    
-                    // Request higher resolution and strict environment facing
-                    const cameraConfig = { 
-                        facingMode: "environment",
-                        width: { ideal: 1080 },
-                        height: { ideal: 1920 }
-                    };
+                // QR_CODE only — skip barcode processing, saves CPU
+                const scanner = new Html5Qrcode("reader", {
+                    formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
+                    verbose: false,
+                })
+                scannerRef.current = scanner
+                localScanner = scanner
 
-                    scanner.start(
-                        cameraConfig,
-                        { fps: 15, qrbox: { width: 250, height: 250 } },
-                        async (decodedText) => {
-                            if (isSetup) return
-                            isSetup = true
-                            processScan(decodedText)
+                // Dynamic qrbox: 72% of the reader element's actual width
+                const readerWidth = readerNode.offsetWidth || 300
+                const boxSize = Math.floor(readerWidth * 0.72)
+
+                scanner.start(
+                    /* cameraIdOrConstraints */
+                    {
+                        facingMode: { ideal: "environment" },
+                    },
+                    /* config */
+                    {
+                        fps: 15,
+                        qrbox: { width: boxSize, height: boxSize },
+                        aspectRatio: 1.0,
+                        videoConstraints: {
+                            facingMode: { ideal: "environment" },
+                            width:  { ideal: 1280 },
+                            height: { ideal: 720  },
                         },
-                        (errorMessage) => {
-                            // parse errors ignore
-                        }
-                    ).catch(err => {
-                        console.error("Camera access failed", err)
-                    })
-                } catch (err) {
-                     console.error("Scanner initialization failed", err)
-                }
+                    },
+                    /* onSuccess */
+                    async (decodedText) => {
+                        if (isSetup) return
+                        isSetup = true
+                        processScan(decodedText)
+                    },
+                    /* onError — frame-level failures, suppress console spam */
+                    (_errorMessage) => { /* no-op */ }
+                ).catch(err => {
+                    console.error("Camera start failed:", err)
+                    // Fallback toast so the user knows
+                    showToast("Camera unavailable. Use the test buttons below.")
+                    scannerRef.current = null
+                    localScanner = null
+                })
             }).catch(err => {
-                console.error("html5-qrcode load failed", err)
+                console.error("html5-qrcode load failed:", err)
             })
         }
 
         return () => {
-            isSetup = true; // prevent any pending scans from passing
-            if (scannerRef.current) {
-                const scanner = scannerRef.current;
-                scannerRef.current = null; // immediately detach to prevent loops
-
-                try {
-                    scanner.stop().then(() => {
-                        scanner.clear();
-                    }).catch(err => {
-                        console.warn("Scanner stop warning:", err);
-                        try { scanner.clear() } catch(e){}
-                    })
-                } catch(e) {
-                    console.warn("Scanner cleanup warning:", e);
-                    try { scanner.clear() } catch(e){}
-                }
-            }
-            
-            // Absolute nuclear option to ensure UI doesn't visually stack multiple cameras on fast-reloads
+            // Always nuke the DOM node first for instant visual cleanup
             const readerNode = document.getElementById("reader");
             if (readerNode) readerNode.innerHTML = "";
+
+            // Graceful async stop → clear so the camera stream is fully released
+            const instance = localScanner || scannerRef.current
+            if (instance) {
+                instance.stop()
+                    .then(() => {
+                        try { instance.clear() } catch (_) {}
+                    })
+                    .catch(() => {
+                        try { instance.clear() } catch (_) {}
+                    })
+                    .finally(() => {
+                        if (scannerRef.current === instance) scannerRef.current = null
+                        localScanner = null
+                    })
+            }
         }
     }, [isOpen, phase]) 
     // Stripped all other dependencies to brutally prevent mid-scan re-initialization crashes
