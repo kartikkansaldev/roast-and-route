@@ -59,8 +59,12 @@ export default function PaymentSimulator({ isOpen, onClose }) {
             return
         }
 
-        if (!/\d|₹/.test(rawText)) {
-            showToast("Invalid QR Code: No payment data found.");
+        // Accept: UPI QR codes (upi://), payment URLs, any text with payment signals
+        // Previously rejected friend's GPay/PhonePe QRs that have no digits in clean P2P format
+        const isUpiScheme = /^upi:\/\//i.test(rawText.trim());
+        const hasPaymentSignal = /\d|₹|pay|upi|gpay|phone|paytm|bhim|merchant|amount/i.test(rawText);
+        if (!isUpiScheme && !hasPaymentSignal) {
+            showToast("Invalid QR Code: Not a payment QR.");
             return;
         }
 
@@ -78,13 +82,17 @@ export default function PaymentSimulator({ isOpen, onClose }) {
             const url = new URL(rawText);
             if (url.searchParams.has('pn')) {
                 parsedName = decodeURIComponent(url.searchParams.get('pn'));
+            } else if (url.searchParams.has('pa')) {
+                // Fallback: extract readable name from UPI ID (e.g. john.doe@okaxis -> John Doe)
+                const pa = url.searchParams.get('pa');
+                parsedName = pa.split('@')[0].replace(/[._-]/g, ' ');
             }
             if (url.searchParams.has('am')) {
                 const parsedAm = parseFloat(url.searchParams.get('am'));
                 if (!isNaN(parsedAm) && parsedAm > 0) amount = parsedAm;
             }
         } catch (e) {
-            const amountMatch = rawText.match(/₹\s*(\d+)/i) || rawText.match(/\b(\d{1,5})\b/);
+            const amountMatch = rawText.match(/₹\s*(\d+)/i) || rawText.match(/\b(\d{2,5})\b/);
             if (amountMatch) {
                 amount = parseInt(amountMatch[1]);
             }
@@ -135,84 +143,99 @@ export default function PaymentSimulator({ isOpen, onClose }) {
     // Setup QR Scanner — dynamic import to prevent SSR/init crashes
     useEffect(() => {
         let isSetup = false
-        let localScanner = null // local ref to safely use in async cleanup
+        let invertedInterval = null  // Parallel dark-QR scanner cleanup handle
 
         if (isOpen && phase === 'SCANNER') {
             if (scannerRef.current) return;
-
-            import('html5-qrcode').then(({ Html5Qrcode, Html5QrcodeSupportedFormats }) => {
+            import('html5-qrcode').then(({ Html5Qrcode }) => {
                 const readerNode = document.getElementById("reader");
                 if (!readerNode) return;
-                readerNode.innerHTML = ""; // Prune zombie videos from StrictMode double-mounts
+                readerNode.innerHTML = ""; // Prune any zombie videos from StrictMode double-mounts
 
-                // QR_CODE only — skip barcode processing, saves CPU
                 const scanner = new Html5Qrcode("reader", {
-                    formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
-                    verbose: false,
+                    experimentalFeatures: { useBarCodeDetectorIfSupported: true }
                 })
                 scannerRef.current = scanner
-                localScanner = scanner
 
-                // Dynamic qrbox: 72% of the reader element's actual width
-                const readerWidth = readerNode.offsetWidth || 300
-                const boxSize = Math.floor(readerWidth * 0.72)
-
+                // ── Main scanner: handles standard (light-bg) QR codes ──────────────
                 scanner.start(
-                    /* cameraIdOrConstraints */
+                    { facingMode: "environment" },
                     {
-                        facingMode: { ideal: "environment" },
+                        fps: 20,
+                        qrbox: (w, h) => {
+                            const edge = Math.floor(Math.min(w, h) * 0.8);
+                            return { width: edge, height: edge };
+                        }
                     },
-                    /* config */
-                    {
-                        fps: 15,
-                        qrbox: { width: boxSize, height: boxSize },
-                        aspectRatio: 1.0,
-                        videoConstraints: {
-                            facingMode: { ideal: "environment" },
-                            width:  { ideal: 1280 },
-                            height: { ideal: 720  },
-                        },
-                    },
-                    /* onSuccess */
                     async (decodedText) => {
                         if (isSetup) return
                         isSetup = true
+                        if (invertedInterval) clearInterval(invertedInterval)
                         processScan(decodedText)
                     },
-                    /* onError — frame-level failures, suppress console spam */
-                    (_errorMessage) => { /* no-op */ }
+                    () => { /* per-frame parse errors — ignore */ }
                 ).catch(err => {
-                    console.error("Camera start failed:", err)
-                    // Fallback toast so the user knows
-                    showToast("Camera unavailable. Use the test buttons below.")
-                    scannerRef.current = null
-                    localScanner = null
+                    console.error("Camera access failed:", err)
                 })
+
+                // ── Parallel jsQR Scanner (fallback for dark/inverted QRs) ───────────
+                // Starts after 500ms so video stream is live. Catches anything html5-qrcode misses.
+                setTimeout(() => {
+                    import('jsqr').then(({ default: jsQR }) => {
+                        const ivCanvas = document.createElement('canvas');
+                        const ivCtx = ivCanvas.getContext('2d');
+
+                        invertedInterval = setInterval(() => {
+                            if (isSetup) { clearInterval(invertedInterval); return; }
+
+                            const video = document.querySelector('#reader video');
+                            if (!video || video.readyState < 2) return;
+
+                            ivCanvas.width  = Math.floor(video.videoWidth  * 0.75);
+                            ivCanvas.height = Math.floor(video.videoHeight * 0.75);
+                            ivCtx.drawImage(video, 0, 0, ivCanvas.width, ivCanvas.height);
+
+                            const imageData = ivCtx.getImageData(0, 0, ivCanvas.width, ivCanvas.height);
+
+                            // 'attemptBoth' = tries normal + inverted every frame
+                            // Catches dark-bg QRs (PhonePe, GPay dark mode) that html5-qrcode misses
+                            const code = jsQR(imageData.data, ivCanvas.width, ivCanvas.height, {
+                                inversionAttempts: 'attemptBoth'
+                            });
+
+                            if (code && !isSetup) {
+                                isSetup = true;
+                                clearInterval(invertedInterval);
+                                processScan(code.data);
+                            }
+                        }, 150);
+                    }).catch(e => console.warn('jsQR load failed (non-critical):', e));
+                }, 500);
             }).catch(err => {
-                console.error("html5-qrcode load failed:", err)
+                console.error("html5-qrcode load failed", err)
             })
         }
 
         return () => {
-            // Always nuke the DOM node first for instant visual cleanup
+            if (invertedInterval) clearInterval(invertedInterval)
+            if (scannerRef.current) {
+                try {
+                    scannerRef.current.stop().then(() => {
+                        if (scannerRef.current) {
+                            scannerRef.current.clear()
+                            scannerRef.current = null
+                        }
+                    }).catch(() => {
+                        scannerRef.current = null
+                    })
+                } catch(e) {
+                    scannerRef.current = null
+                }
+            }
+            
+            // Absolute nuclear option to ensure UI doesn't visually stack multiple cameras on fast-reloads
             const readerNode = document.getElementById("reader");
             if (readerNode) readerNode.innerHTML = "";
-
-            // Graceful async stop → clear so the camera stream is fully released
-            const instance = localScanner || scannerRef.current
-            if (instance) {
-                instance.stop()
-                    .then(() => {
-                        try { instance.clear() } catch (_) {}
-                    })
-                    .catch(() => {
-                        try { instance.clear() } catch (_) {}
-                    })
-                    .finally(() => {
-                        if (scannerRef.current === instance) scannerRef.current = null
-                        localScanner = null
-                    })
-            }
         }
     }, [isOpen, phase]) 
     // Stripped all other dependencies to brutally prevent mid-scan re-initialization crashes
