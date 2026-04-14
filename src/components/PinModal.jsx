@@ -12,6 +12,8 @@ export default function PinModal({ isOpen, onClose, onSuccess }) {
             setError(false)
 
             if (newPin.length === 4) {
+                // 50ms micro-delay: just enough for the 4th dot to visually fill
+                // before dismissing — prevents the "PIN overlay" glitch on VIDEO_SMASH
                 setTimeout(() => {
                     if (newPin === '0000') {
                         onSuccess()
@@ -21,7 +23,7 @@ export default function PinModal({ isOpen, onClose, onSuccess }) {
                         setError(true)
                         setTimeout(() => setPin(''), 500)
                     }
-                }, 300)
+                }, 50)
             }
         }
     }

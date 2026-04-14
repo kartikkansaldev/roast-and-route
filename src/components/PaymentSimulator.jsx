@@ -19,6 +19,7 @@ export default function PaymentSimulator({ isOpen, onClose }) {
     const [enteredPin, setEnteredPin] = useState('')
     const [pinError, setPinError] = useState(false)
     const [isProcessing, setIsProcessing] = useState(false)
+    const [hasPassedSmash, setHasPassedSmash] = useState(false)
 
     const scannerRef = useRef(null)
 
@@ -35,6 +36,7 @@ export default function PaymentSimulator({ isOpen, onClose }) {
             setEnteredPin('')
             setPinError(false)
             setIsProcessing(false)
+            setHasPassedSmash(false)
             setPendingRoast(null)
             setRoastType(null)
             if (scannerRef.current) {
@@ -216,12 +218,10 @@ export default function PaymentSimulator({ isOpen, onClose }) {
         // Prevent double execution if triggered by both onEnded and Timeout
         setPhase(curr => {
             if (curr === 'VIDEO_SMASH') {
-                requestPin(() => {
-                    setUserBalance(prev => prev - (scannedAmount > 0 ? scannedAmount : 2500))
-                    addSurvivalPoints(-15)
-                    showToast("Payment forced through. But I'm judging you.")
-                    onClose()
-                })
+                setUserBalance(prev => prev - (scannedAmount > 0 ? scannedAmount : 2500))
+                addSurvivalPoints(-15)
+                showToast("Payment forced through. But I'm judging you. 💀")
+                onClose()
                 return 'DONE'
             }
             return curr
@@ -238,7 +238,7 @@ export default function PaymentSimulator({ isOpen, onClose }) {
             {/* Dark backing */}
             {phase !== 'VIDEO_SMASH' && (
                 <div
-                    className="absolute inset-0 bg-black/95 backdrop-blur-md transition-colors duration-200"
+                    className="absolute inset-0 bg-[#1c1c1c] transition-colors duration-200"
                     onClick={phase === 'SCANNER' ? onClose : undefined}
                 />
             )}
@@ -330,7 +330,7 @@ export default function PaymentSimulator({ isOpen, onClose }) {
                 )}
             </AnimatePresence>
 
-            {/* PHASE: VIDEO SMASH (Fullscreen) */}
+            {/* PHASE: VIDEO SMASH (contained within mobile frame) */}
             {phase === 'VIDEO_SMASH' && (
                 <div className="absolute inset-0 z-50 bg-[#121212]">
                     <video
@@ -339,7 +339,8 @@ export default function PaymentSimulator({ isOpen, onClose }) {
                         muted
                         playsInline
                         onEnded={handleSmashEnd}
-                        className="w-full h-full object-cover pointer-events-auto"
+                        className="w-full h-full pointer-events-none"
+                        style={{ objectFit: 'cover', display: 'block' }}
                     />
                 </div>
             )}
@@ -397,7 +398,7 @@ export default function PaymentSimulator({ isOpen, onClose }) {
 
                 {/* STEP 2: UPI PIN */}
                 {paymentStep === 2 && (
-                    <motion.div key="step2" initial={{ x: '100%'} } animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 220 }} className="absolute inset-0 z-[110] bg-[#141414] flex flex-col justify-between p-6 pb-12 font-sans items-center pointer-events-auto">
+                    <motion.div key="step2" initial={{ x: '100%'} } animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 220 }} className="absolute inset-0 z-[110] bg-[#121212] flex flex-col justify-between p-6 pb-12 font-sans items-center pointer-events-auto">
                         <div className="w-full flex-1 flex flex-col pt-12 items-center">
                             <div className="flex items-center gap-2 mb-6 text-white/50 text-[13px] font-semibold bg-white/5 px-4 py-1.5 rounded-full">
                                 <span>🔒</span> Secured by NPCI
@@ -451,17 +452,18 @@ export default function PaymentSimulator({ isOpen, onClose }) {
                                     </button>
                                     <button onClick={() => {
                                         if(enteredPin.length === 4) {
-                                            setIsProcessing(true);
-                                            setTimeout(() => {
-                                                setIsProcessing(false);
-                                                if (roastType === 'IMPULSE' && pendingRoast) {
-                                                    // 🔥 INSTANT INTERCEPT — use pre-fetched AI, zero wait
-                                                    setPaymentStep(0);
-                                                    setPhase('ROAST_MODAL');
-                                                } else {
-                                                    setPaymentStep(3); // ESSENTIAL: go straight to success
-                                                }
-                                            }, 1400);
+                                            if (roastType === 'IMPULSE' && pendingRoast) {
+                                                // 🔥 INSTANT HIDE → Hammer Smash → Intercept Modal
+                                                setPaymentStep(0);     // Immediately hide PIN screen
+                                                setPhase('VIDEO_SMASH'); // Play hammer video at once
+                                            } else {
+                                                // ESSENTIAL: show processing spinner then success
+                                                setIsProcessing(true);
+                                                setTimeout(() => {
+                                                    setIsProcessing(false);
+                                                    setPaymentStep(3);
+                                                }, 1400);
+                                            }
                                         }
                                     }} className={`w-[68px] h-[68px] rounded-full mx-auto flex items-center justify-center text-black text-2xl transition-all duration-300 ${enteredPin.length === 4 ? 'bg-[#34c97a] hover:bg-[#34c97a]/90 shadow-[0_4px_16px_rgba(52,201,122,0.4)] cursor-pointer scale-105' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
                                         ✓
