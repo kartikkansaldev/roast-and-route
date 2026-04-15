@@ -302,14 +302,14 @@ export default function PaymentSimulator({ isOpen, onClose }) {
 
                     {/* PHASE: SCANNER UI */}
                     {phase === 'SCANNER' && (
-                        <motion.div key="scanner" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="w-full max-w-sm pointer-events-auto">
-                            <div className="w-full aspect-[3/4] border-2 border-white/20 rounded-[40px] relative overflow-hidden mb-8 shadow-[0_0_50px_rgba(255,255,255,0.05)] bg-black" id="reader">
+                        <motion.div key="scanner" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="w-full max-w-sm pointer-events-auto h-full max-h-[100dvh] overflow-y-auto no-scroll flex flex-col justify-center py-2">
+                            <div className="w-full aspect-square max-h-[45vh] border-2 border-white/20 rounded-[40px] relative overflow-hidden mb-5 shadow-[0_0_50px_rgba(255,255,255,0.05)] bg-black shrink-0" id="reader">
                             </div>
 
-                            <p className="text-white/40 text-center font-bold tracking-widest uppercase text-sm mb-4">Scanning for UPI QR Code...</p>
+                            <p className="text-white/40 text-center font-bold tracking-widest uppercase text-[12px] sm:text-sm mb-4 shrink-0">Scanning for UPI QR...</p>
 
-                            <div className="flex flex-col items-center gap-3 w-full border border-white/10 p-4 rounded-2xl bg-white/5">
-                                <span className="text-white/60 text-[11px] uppercase tracking-wider font-bold mb-1">Simulate Scan (Dev Tools)</span>
+                            <div className="flex flex-col items-center gap-2.5 w-full border border-white/10 p-3.5 rounded-2xl bg-white/5 shrink-0">
+                                <span className="text-white/60 text-[10px] sm:text-[11px] uppercase tracking-wider font-bold mb-1">Simulate Scan (Dev Tools)</span>
                                 <button onClick={() => processScan("Zara Fast Fashion Jacket - ₹4500")} className="w-full py-2.5 rounded-xl bg-[#ff4444]/20 border border-[#ff4444]/50 text-[#ff8a8a] text-[13px] font-bold hover:bg-[#ff4444]/30 transition-colors">
                                     Simulate: Zara Jacket (₹4500)
                                 </button>
@@ -318,7 +318,7 @@ export default function PaymentSimulator({ isOpen, onClose }) {
                                 </button>
                             </div>
 
-                            <button onClick={onClose} className="mt-8 text-white/50 text-[14px] font-medium block mx-auto hover:text-white/80 transition-colors">
+                            <button onClick={onClose} className="mt-5 text-white/50 text-[14px] font-medium block mx-auto hover:text-white/80 transition-colors shrink-0">
                                 Cancel Scan
                             </button>
                         </motion.div>
