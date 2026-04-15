@@ -35,8 +35,7 @@ function AppContent() {
   }, [setIsScannerOpen])
 
   return (
-    <div className="min-h-screen bg-black font-sans flex items-center justify-center py-8">
-
+    <div className="font-sans bg-black md:min-h-screen md:flex md:items-center md:justify-center">
 
       {/* Global Toast */}
       <AnimatePresence>
@@ -52,38 +51,21 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      {/* ── Outer phone frame ── */}
+      {/* ── Main App Container ── */}
       <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 30 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 200, damping: 28, delay: 0.05 }}
-        className="relative flex-shrink-0"
+        className="w-full h-[100dvh] bg-[#121212] overflow-hidden flex flex-col relative md:w-[400px] md:h-[850px] md:rounded-[40px] md:border-[12px] md:border-black md:shadow-2xl md:[zoom:0.8] origin-center"
       >
-        {/* Physical chassis */}
-        <div
-          className="relative rounded-[54px] p-[10px]"
-          style={{
-            background: 'linear-gradient(145deg, #2e2e2e 0%, #1a1a1a 50%, #111 100%)',
-            boxShadow: '0 0 0 1px rgba(255,255,255,0.09), inset 0 0 0 1px rgba(255,255,255,0.03), 0 60px 160px rgba(0,0,0,0.9)',
-          }}
-        >
-          {/* Volume buttons */}
-          <div className="absolute -left-[3.5px] top-[110px] w-[3.5px] h-[32px] bg-[#2a2a2a] rounded-l-sm" />
-          <div className="absolute -left-[3.5px] top-[154px] w-[3.5px] h-[32px] bg-[#2a2a2a] rounded-l-sm" />
-          {/* Power button */}
-          <div className="absolute -right-[3.5px] top-[130px] w-[3.5px] h-[64px] bg-[#2a2a2a] rounded-r-sm" />
+        {/* Dynamic Island notch (Desktop Only) */}
+        <div className="hidden md:flex absolute top-3 left-1/2 -translate-x-1/2 w-[124px] h-[34px] bg-black rounded-full z-50 items-center justify-between px-3 shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.05)]">
+          <div className="w-[13px] h-[13px] rounded-full bg-[#181818]" />
+          <div className="w-[10px] h-[10px] rounded-full bg-[#181818]" />
+        </div>
 
-          {/* Screen */}
-          <div className="relative w-[390px] h-[844px] bg-[#121212] rounded-[44px] overflow-hidden flex flex-col shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
-
-            {/* Dynamic Island notch */}
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 w-[124px] h-[34px] bg-black rounded-full z-50 flex items-center justify-between px-3 shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.05)]">
-              <div className="w-[13px] h-[13px] rounded-full bg-[#181818]" />
-              <div className="w-[10px] h-[10px] rounded-full bg-[#181818]" />
-            </div>
-
-            {/* Home indicator */}
-            <div className="absolute bottom-[6px] left-1/2 -translate-x-1/2 w-[130px] h-[5px] bg-white/20 rounded-full z-50" />
+        {/* Home indicator (Desktop Only) */}
+        <div className="hidden md:block absolute bottom-[6px] left-1/2 -translate-x-1/2 w-[130px] h-[5px] bg-white/20 rounded-full z-50" />
 
             {/* Onboarding overlay inside the phone screen */}
             <AnimatePresence>
@@ -182,8 +164,6 @@ function AppContent() {
               }}
             />
 
-          </div>
-        </div>
       </motion.div>
     </div>
   )
